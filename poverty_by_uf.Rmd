@@ -1,0 +1,160 @@
+---
+title: "Indicadores de pobreza no Brasil em 2019 por UF."
+author: "Vitor Hugo Miro (UFC)"
+date: "03/12/2021"
+output: 
+    ioslides_presentation:
+        widescreen: true
+        smaller: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+Alguns comandos úteis antes de iniciar um projeto de análise de dados no R.
+
+```{r, echo = TRUE}
+rm(list = ls())
+options(scipen = 999) # para evitar notação científica.
+```
+
+## Carregar pacotes
+
+```{r, echo = TRUE}
+
+library(PNADcIBGE)
+library(survey)
+library(tidyverse)
+
+```
+
+
+## Escolher variáveis
+
+Ao invés de carregar todos os dados da PNADC, podemos definir um vetor de variáveis
+de interesse.
+
+```{r, echo = TRUE}
+
+# Definir variáveis utilizadas na análise
+variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 
+               'V1022', 'V2001', 'V2005', 'V2007', 'V2009', 
+               'VD4001', 'VD4002', 'VD4016', 'VD4017', 
+               'VD4019', 'VD4020', 'VD4022', 'VD4048', 'VD5008')
+
+```
+
+
+## get_pnadc
+
+```{r, echo = TRUE}
+
+# Carrega dados da PNADC 
+pnadc <- get_pnadc(year = 2019,
+                   vars = variaveis,
+                   interview = 1,
+                   design = TRUE,
+                   labels = TRUE,
+                   deflator = TRUE,
+                   defyear = 2019)
+
+```
+
+## Detalhes da base
+
+```{r, echo = TRUE}
+str(pnadc)
+
+```
+
+## Carregando o pacote Convey e preparando os dados
+
+```{r, echo = TRUE}
+library(convey)
+
+pnadc <- convey_prep(pnadc)
+class(pnadc)
+```
+
+
+## Indicadores de pobreza
+
+```{r, echo = TRUE}
+fgt0 <- svyfgt(~VD5008, pnadc, g=0, abs_thresh = 436, na.rm = TRUE)
+fgt0
+
+fgt1 <- svyfgt(~VD5008, pnadc, g=1, abs_thresh = 436, na.rm = TRUE)
+fgt1
+
+fgt2 <- svyfgt(~VD5008, pnadc, g=2, abs_thresh = 436, na.rm = TRUE)
+fgt2
+```
+
+## Indicadores de pobreza por UF
+
+```{r, echo = TRUE}
+fgt0_uf <- survey::svyby(~VD5008,
+                         by = ~UF,
+                         design = pnadc,
+                         FUN = svyfgt,
+                         g=0, 
+                         abs_thresh = 436,
+                         na.rm = TRUE)
+```
+
+Plotar gráfico com estes indicadores.
+
+```{r, echo = TRUE}
+fgt0_uf %>% 
+    dplyr::as_tibble() %>%
+    dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
+    ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
+    ggplot2::geom_col() +
+    ggplot2::theme_classic() +
+    ggplot2::labs(title = "Proporção de Pobres por Estado",
+                  subtitle = "Linha de pobreza do Banco Mundial.",
+                  x = NULL,
+                  y = NULL,
+                  caption = "Fonte: IBGE/PNADC Microdados.")+
+    ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
+```
+
+## Indicadores de pobreza por UF - Areas Rurais
+
+```{r, echo = TRUE}
+fgt0_uf_rural <- survey::svyby(~VD5008,
+                               by = ~UF,
+                               design = subset(pnadc, V1022 == "Rural"),
+                               FUN = svyfgt,
+                               g=0, 
+                               abs_thresh = 436,
+                               na.rm = TRUE)
+```
+
+Plotar gráfico com estes indicadores.
+
+```{r, echo = TRUE}
+fgt0_uf_rural %>% 
+    dplyr::as_tibble() %>%
+    dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
+    ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
+    ggplot2::geom_col() +
+    ggplot2::theme_classic() +
+    ggplot2::labs(title = "Proporção de Pobres por Estado - Áreas Rurais",
+                  subtitle = "Linha de pobreza do Banco Mundial.",
+                  x = NULL,
+                  y = NULL,
+                  caption = "Fonte: IBGE/PNADC Microdados.") +
+    ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
+```
+
+## Indicadores de desigualdade de renda por UF
+
+```{r, echo = TRUE}
+gini_uf <- survey::svyby(~VD5008,
+                         by = ~UF,
+                         design = pnadc,
+                         FUN = svygini,
+                         na.rm = TRUE)
+```
