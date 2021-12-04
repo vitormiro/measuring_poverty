@@ -1,43 +1,38 @@
 ---
-title: "Indicadores de pobreza no Brasil em 2019 por UF."
+title: "Inequality and Poverty in Brazil."
 author: "Vitor Hugo Miro (UFC)"
 date: "03/12/2021"
-output: 
-    ioslides_presentation:
-        widescreen: true
-        smaller: true
+
+output: html_notebook
+
 ---
+
+## Poverty
+
+This analysis are based on data from the Continuous National Household Sample Survey (Pesquisa Nacional por Amostra de Domicílios Contínua) for 2019.
+
+We will be using R and RStudio, as well as the appropriate libraries, to extract the data, calculate poverty and inequality indicators, and plot graphs to present this information.
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Alguns comandos úteis antes de iniciar um projeto de análise de dados no R.
-
-```{r, echo = TRUE}
+```{r, echo = FALSE, include=FALSE}
 rm(list = ls())
-options(scipen = 999) # para evitar notação científica.
+options(scipen = 999)
 ```
 
-## Carregar pacotes
-
-```{r, echo = TRUE}
-
+```{r, include=TRUE}
+# Carregar pacote
 library(PNADcIBGE)
 library(survey)
+library(convey)
 library(tidyverse)
-
 ```
 
-
-## Escolher variáveis
-
-Ao invés de carregar todos os dados da PNADC, podemos definir um vetor de variáveis
-de interesse.
-
-```{r, echo = TRUE}
-
-# Definir variáveis utilizadas na análise
+```{r, include=TRUE}
+# Definir variáveis utilizadas na análise em um vetor
 variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 
                'V1022', 'V2001', 'V2005', 'V2007', 'V2009', 
                'VD4001', 'VD4002', 'VD4016', 'VD4017', 
@@ -46,10 +41,7 @@ variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032',
 ```
 
 
-## get_pnadc
-
-```{r, echo = TRUE}
-
+```{r, include=TRUE}
 # Carrega dados da PNADC 
 pnadc <- get_pnadc(year = 2019,
                    vars = variaveis,
@@ -58,40 +50,45 @@ pnadc <- get_pnadc(year = 2019,
                    labels = TRUE,
                    deflator = TRUE,
                    defyear = 2019)
-
 ```
-
-## Detalhes da base
 
 ```{r, echo = TRUE}
 str(pnadc)
-
 ```
 
-## Carregando o pacote Convey e preparando os dados
+## Measuring poverty
+
+The poverty measures, commonly known as the Foster-Greer-Thorbecke (FGT) family of poverty, including:
+
+- Poverty headcount index = FGT(0)
+- Poverty gap index = FGT(1)
+- Poverty severity index = FGT(2)
+
+This poverty measures was calculated using the R `convey` library.
 
 ```{r, echo = TRUE}
-library(convey)
-
 pnadc <- convey_prep(pnadc)
 class(pnadc)
 ```
 
-
-## Indicadores de pobreza
-
 ```{r, echo = TRUE}
 fgt0 <- svyfgt(~VD5008, pnadc, g=0, abs_thresh = 436, na.rm = TRUE)
-fgt0
+fgt0 <- round(fgt0, 4)*100
 
 fgt1 <- svyfgt(~VD5008, pnadc, g=1, abs_thresh = 436, na.rm = TRUE)
-fgt1
+fgt1 <- round(fgt1, 4)*100
 
 fgt2 <- svyfgt(~VD5008, pnadc, g=2, abs_thresh = 436, na.rm = TRUE)
-fgt2
+fgt2 <- round(fgt2, 4)*100
 ```
 
-## Indicadores de pobreza por UF
+- Poverty headcount index = `r (fgt0)`%.
+
+- Poverty gap index = `r (fgt1)`%.
+
+- Poverty severity index = `r (fgt2)`%.
+
+## Poverty rate in 2019, by state (Unidade Federativa - UF)
 
 ```{r, echo = TRUE}
 fgt0_uf <- survey::svyby(~VD5008,
@@ -103,7 +100,7 @@ fgt0_uf <- survey::svyby(~VD5008,
                          na.rm = TRUE)
 ```
 
-Plotar gráfico com estes indicadores.
+The graph below shows the poverty rate values for the Brazilian states.
 
 ```{r, echo = TRUE}
 fgt0_uf %>% 
@@ -112,11 +109,11 @@ fgt0_uf %>%
     ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
     ggplot2::geom_col() +
     ggplot2::theme_classic() +
-    ggplot2::labs(title = "Proporção de Pobres por Estado",
-                  subtitle = "Linha de pobreza do Banco Mundial.",
+    ggplot2::labs(title = "Poverty rate by UF (2019)",
+                  subtitle = "Considering the US$ 5.50 PPP line.",
                   x = NULL,
                   y = NULL,
-                  caption = "Fonte: IBGE/PNADC Microdados.")+
+                  caption = "Source: IBGE/PNADC microdata.")+
     ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
 ```
 
@@ -132,7 +129,7 @@ fgt0_uf_rural <- survey::svyby(~VD5008,
                                na.rm = TRUE)
 ```
 
-Plotar gráfico com estes indicadores.
+The graph below shows the rural poverty rate values for the Brazilian states.
 
 ```{r, echo = TRUE}
 fgt0_uf_rural %>% 
@@ -141,15 +138,17 @@ fgt0_uf_rural %>%
     ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
     ggplot2::geom_col() +
     ggplot2::theme_classic() +
-    ggplot2::labs(title = "Proporção de Pobres por Estado - Áreas Rurais",
-                  subtitle = "Linha de pobreza do Banco Mundial.",
+    ggplot2::labs(title = "Poverty rate by UF - Rural areas (2019)",
+                  subtitle = "Considering the US$ 5.50 PPP line.",
                   x = NULL,
                   y = NULL,
-                  caption = "Fonte: IBGE/PNADC Microdados.") +
+                  caption = "Source: IBGE/PNADC microdata.") +
     ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
 ```
 
-## Indicadores de desigualdade de renda por UF
+## Income inequality (Gini Index)
+
+The Gini Index is a summary measure of income inequality.
 
 ```{r, echo = TRUE}
 gini_uf <- survey::svyby(~VD5008,
@@ -158,3 +157,20 @@ gini_uf <- survey::svyby(~VD5008,
                          FUN = svygini,
                          na.rm = TRUE)
 ```
+
+
+
+```{r, echo = TRUE}
+gini_uf %>% 
+    dplyr::as_tibble() %>%
+    dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
+    ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
+    ggplot2::geom_col() +
+    ggplot2::theme_classic() +
+    ggplot2::labs(title = "Gini Index by UF (2019)",
+                  x = NULL,
+                  y = NULL,
+                  caption = "Source: IBGE/PNADC microdata.")+
+    ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
+```
+
