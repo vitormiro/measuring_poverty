@@ -27,16 +27,16 @@ options(scipen = 999)
 # Carregar pacote
 library(PNADcIBGE)
 library(survey)
+library(srvyr)
 library(convey)
 library(tidyverse)
 ```
 
 ```{r, include=TRUE}
 # Definir variáveis utilizadas na análise em um vetor
-variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 
-               'V1022', 'V2001', 'V2005', 'V2007', 'V2009', 
-               'VD4001', 'VD4002', 'VD4016', 'VD4017', 
-               'VD4019', 'VD4020', 'VD4022', 'VD4048', 'VD5008')
+
+variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 'V1022', 
+               'V2001', 'V2005', 'VD4019', 'VD4020', 'VD4022', 'VD4048', 'VD5008')
 
 ```
 
@@ -53,7 +53,7 @@ pnadc <- get_pnadc(year = 2019,
 ```
 
 ```{r, echo = TRUE}
-str(pnadc)
+glimpse(pnadc)
 ```
 
 ## Measuring poverty
@@ -64,12 +64,16 @@ The poverty measures, commonly known as the Foster-Greer-Thorbecke (FGT) family 
 - Poverty gap index = FGT(1)
 - Poverty severity index = FGT(2)
 
+
 This poverty measures was calculated using the R `convey` library.
 
 ```{r, echo = TRUE}
 pnadc <- convey_prep(pnadc)
 class(pnadc)
 ```
+**Poverty lines**
+The World Bank’s poverty line are widely used international poverty lines, including US\$1.9 a day, US\$3.2 a day and US\$ 5.5 a day (in 2011 PPP). 
+
 
 ```{r, echo = TRUE}
 fgt0 <- svyfgt(~VD5008, pnadc, g=0, abs_thresh = 436, na.rm = TRUE)
@@ -82,13 +86,18 @@ fgt2 <- svyfgt(~VD5008, pnadc, g=2, abs_thresh = 436, na.rm = TRUE)
 fgt2 <- round(fgt2, 4)*100
 ```
 
+Considering the World Bank poverty line (an income of up to US\$5.5 per day or R\$436 per month), the poverty indicators are as follows:
+
 - Poverty headcount index = `r (fgt0)`%.
 
 - Poverty gap index = `r (fgt1)`%.
 
 - Poverty severity index = `r (fgt2)`%.
 
+
 ## Poverty rate in 2019, by state (Unidade Federativa - UF)
+
+Brazil is a country with a large territorial dimension and its regions present very heterogeneous social indicators.
 
 ```{r, echo = TRUE}
 fgt0_uf <- survey::svyby(~VD5008,
@@ -102,13 +111,31 @@ fgt0_uf <- survey::svyby(~VD5008,
 
 The graph below shows the poverty rate values for the Brazilian states.
 
+```{r}
+
+Norte <- c("Acre", "Amapá", "Amazonas", "Pará", "Rondônia", "Roraima", "Tocantins")
+Nordeste <- c("Alagoas", "Bahia", "Ceará", "Maranhão", "Paraíba", "Pernambuco", 
+              "Piauí", "Rio Grande do Norte", "Sergipe")
+COeste <- c("Distrito Federal", "Goiás", "Mato Grosso", "Mato Grosso do Sul")
+Sudeste <- c("Espírito Santo", "Minas Gerais", "Rio de Janeiro", "São Paulo")
+Sul <- c("Paraná", "Rio Grande do Sul", "Santa Catarina")
+
+
+fgt0_uf <- fgt0_uf %>% mutate(
+    regiao = factor(case_when(UF %in% Norte ~ "Norte",
+                              UF %in% Nordeste ~ "Nordeste",
+                              UF %in% COeste ~ "Centro-Oeste",
+                              UF %in% Sudeste ~ "Sudeste",
+                              UF %in% Sul ~ "Sul")))
+```
+
+
 ```{r, echo = TRUE}
 fgt0_uf %>% 
     dplyr::as_tibble() %>%
     dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
     ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
-    ggplot2::geom_col() +
-    ggplot2::theme_classic() +
+    ggplot2::geom_col(aes(fill = regiao)) +
     ggplot2::labs(title = "Poverty rate by UF (2019)",
                   subtitle = "Considering the US$ 5.50 PPP line.",
                   x = NULL,
@@ -117,7 +144,7 @@ fgt0_uf %>%
     ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
 ```
 
-## Indicadores de pobreza por UF - Areas Rurais
+### Poverty rate in rural areas
 
 ```{r, echo = TRUE}
 fgt0_uf_rural <- survey::svyby(~VD5008,
@@ -127,6 +154,13 @@ fgt0_uf_rural <- survey::svyby(~VD5008,
                                g=0, 
                                abs_thresh = 436,
                                na.rm = TRUE)
+
+fgt0_uf_rural <-fgt0_uf_rural %>% mutate(
+    regiao = factor(case_when(UF %in% Norte ~ "Norte",
+                              UF %in% Nordeste ~ "Nordeste",
+                              UF %in% COeste ~ "Centro-Oeste",
+                              UF %in% Sudeste ~ "Sudeste",
+                              UF %in% Sul ~ "Sul")))
 ```
 
 The graph below shows the rural poverty rate values for the Brazilian states.
@@ -136,8 +170,7 @@ fgt0_uf_rural %>%
     dplyr::as_tibble() %>%
     dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
     ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
-    ggplot2::geom_col() +
-    ggplot2::theme_classic() +
+    ggplot2::geom_col(aes(fill = regiao)) +
     ggplot2::labs(title = "Poverty rate by UF - Rural areas (2019)",
                   subtitle = "Considering the US$ 5.50 PPP line.",
                   x = NULL,
@@ -156,8 +189,14 @@ gini_uf <- survey::svyby(~VD5008,
                          design = pnadc,
                          FUN = svygini,
                          na.rm = TRUE)
-```
 
+gini_uf  <- gini_uf %>% mutate(
+    regiao = factor(case_when(UF %in% Norte ~ "Norte",
+                              UF %in% Nordeste ~ "Nordeste",
+                              UF %in% COeste ~ "Centro-Oeste",
+                              UF %in% Sudeste ~ "Sudeste",
+                              UF %in% Sul ~ "Sul")))
+```
 
 
 ```{r, echo = TRUE}
@@ -165,8 +204,7 @@ gini_uf %>%
     dplyr::as_tibble() %>%
     dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
     ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
-    ggplot2::geom_col() +
-    ggplot2::theme_classic() +
+    ggplot2::geom_col(aes(fill = regiao)) +
     ggplot2::labs(title = "Gini Index by UF (2019)",
                   x = NULL,
                   y = NULL,
