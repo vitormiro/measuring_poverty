@@ -1,7 +1,7 @@
 ---
 title: "Inequality and Poverty in Brazil."
 author: "Vitor Hugo Miro (UFC)"
-date: "03/12/2021"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 
 output: html_notebook
 
@@ -35,8 +35,7 @@ library(tidyverse)
 ```{r, include=TRUE}
 # Definir variáveis utilizadas na análise em um vetor
 
-variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 'V1022', 
-               'V2001', 'V2005', 'VD4019', 'VD4020', 'VD4022', 'VD4048', 'VD5008')
+variaveis <- c('Ano', 'UF', 'Estrato', 'UPA', 'V1008', 'V1014', 'V1032', 'V1022', 'V2009', 'VD2002', 'VD4019', 'VD4048')
 
 ```
 
@@ -53,7 +52,42 @@ pnadc <- get_pnadc(year = 2019,
 ```
 
 ```{r, echo = TRUE}
-glimpse(pnadc)
+pnadc <- as_survey(pnadc)
+```
+
+
+```{r}
+pnadc <- pnadc %>% 
+    mutate(
+        id_dom = as.numeric(paste(UPA,V1008,V1014, sep = "")),
+        membro = ifelse(VD2002=="Pensionista" | 
+                            VD2002=="Empregado(a) doméstico(a)" | 
+                            VD2002=="Parente do(a) empregado(a) doméstico(a)",
+                        0,1),
+        ### Contruir variaveis de renda
+        rend_trabalho = ifelse (is.na (VD4019), 0, VD4019*CO2),
+        rend_outrasf = ifelse (is.na (VD4048), 0, VD4048*CO2e),
+        renda = rend_trabalho + rend_outrasf,
+        ### Dimensões geograficas
+        brasil = factor("Brasil"),
+        regiao = factor(ifelse(substr(UPA, start=1, stop=1)=="1","Norte",
+                                  ifelse(substr(UPA, start=1, stop=1)=="2","Nordeste",
+                                         ifelse(substr(UPA, start=1, stop=1)=="3","Sudeste",
+                                                ifelse(substr(UPA, start=1, stop=1)=="4","Sul",
+                                                       ifelse(substr(UPA, start=1, stop=1)=="5","Centro-Oeste",NA))))),
+                        levels = c("Norte","Nordeste","Sudeste","Sul","Centro-Oeste"))
+    )
+
+
+# Criar variaveis agregadas por domicilio
+pnadc <- pnadc %>% group_by(id_dom) %>% 
+    mutate(n_dom = sum(membro),
+           # Construir variavel de renda domiciliar total e rdpc
+           rend_dom_outrasf = ifelse(membro==1, sum(rend_outrasf), 0),
+           rend_dom_trabalho = ifelse(membro==1, sum(rend_trabalho), 0),
+           renda_dom = ifelse(membro==1, sum(renda), 0),
+           rdpc = renda_dom/n_dom ) %>%
+    ungroup()
 ```
 
 ## Measuring poverty
@@ -76,13 +110,13 @@ The World Bank’s poverty line are widely used international poverty lines, inc
 
 
 ```{r, echo = TRUE}
-fgt0 <- svyfgt(~VD5008, pnadc, g=0, abs_thresh = 436, na.rm = TRUE)
+fgt0 <- svyfgt(~rdpc, pnadc, g=0, abs_thresh = 436, na.rm = TRUE)
 fgt0 <- round(fgt0, 4)*100
 
-fgt1 <- svyfgt(~VD5008, pnadc, g=1, abs_thresh = 436, na.rm = TRUE)
+fgt1 <- svyfgt(~rdpc, pnadc, g=1, abs_thresh = 436, na.rm = TRUE)
 fgt1 <- round(fgt1, 4)*100
 
-fgt2 <- svyfgt(~VD5008, pnadc, g=2, abs_thresh = 436, na.rm = TRUE)
+fgt2 <- svyfgt(~rdpc, pnadc, g=2, abs_thresh = 436, na.rm = TRUE)
 fgt2 <- round(fgt2, 4)*100
 ```
 
@@ -100,7 +134,7 @@ Considering the World Bank poverty line (an income of up to US\$5.5 per day or R
 Brazil is a country with a large territorial dimension and its regions present very heterogeneous social indicators.
 
 ```{r, echo = TRUE}
-fgt0_uf <- survey::svyby(~VD5008,
+fgt0_uf <- survey::svyby(~rdpc,
                          by = ~UF,
                          design = pnadc,
                          FUN = svyfgt,
@@ -126,22 +160,68 @@ fgt0_uf <- fgt0_uf %>% mutate(
                               UF %in% Nordeste ~ "Nordeste",
                               UF %in% COeste ~ "Centro-Oeste",
                               UF %in% Sudeste ~ "Sudeste",
-                              UF %in% Sul ~ "Sul")))
-```
+                              UF %in% Sul ~ "Sul")),
+    abbrev_uf = recode(UF, 
+                       "Acre" = "AC",
+                       "Amapá" = "AP",
+                       "Amazonas" = "AM",
+                       "Pará" = "PA",
+                       "Rondônia" = "RO",
+                       "Roraima" = "RR",
+                       "Tocantins" = "TO",
+                       "Alagoas" = "AL",
+                       "Bahia" = "BA",
+                       "Ceará" = "CE",
+                       "Maranhão" = "MA",
+                       "Paraíba" = "PB",
+                       "Pernambuco" = "PE",
+                       "Piauí" = "PI",
+                       "Rio Grande do Norte" = "RN",
+                       "Sergipe" = "SE",
+                       "Distrito Federal" = "DF",
+                       "Goiás" = "GO",
+                       "Mato Grosso" = "MT", 
+                       "Mato Grosso do Sul" = "MS",
+                       "Espírito Santo" = "ES", 
+                       "Minas Gerais" = "MG", 
+                       "Rio de Janeiro" = "RJ", 
+                       "São Paulo" = "SP",
+                       "Paraná" = "PR", 
+                       "Rio Grande do Sul" = "RS", 
+                       "Santa Catarina"= "SC")
+    )
 
-
-```{r, echo = TRUE}
 fgt0_uf %>% 
     dplyr::as_tibble() %>%
-    dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
-    ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
+    dplyr::mutate(UF = forcats::fct_reorder(UF, rdpc)) %>%
+    ggplot2::ggplot(ggplot2::aes(x = rdpc, y = UF)) +
     ggplot2::geom_col(aes(fill = regiao)) +
     ggplot2::labs(title = "Poverty rate by UF (2019)",
                   subtitle = "Considering the US$ 5.50 PPP line.",
                   x = NULL,
                   y = NULL,
                   caption = "Source: IBGE/PNADC microdata.")+
-    ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
+    ggplot2::geom_text(aes(label= round(rdpc,2)), vjust=0.5, hjust=-0.2, size=2.5)
+
+```
+
+**Poverty Map**
+```{r}
+library(geobr)
+library(sf)
+
+map <- read_state(showProgress = FALSE)
+
+fgt0_map = left_join(map, fgt0_uf, by=c("abbrev_state"="abbrev_uf"))
+
+fgt0_map %>% 
+    ggplot(aes(fill=rdpc), color = "black") +
+    geom_sf() +
+    theme_bw() +
+    scale_fill_distiller(palette = "YlGnBu", name="Percentage", trans = "reverse")+
+    labs(title="Percentage of People in Poverty by State",
+         caption="Source: IBGE/PNADC microdata.", size=8)
+
 ```
 
 ### Poverty rate in rural areas
@@ -179,36 +259,5 @@ fgt0_uf_rural %>%
     ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
 ```
 
-## Income inequality (Gini Index)
 
-The Gini Index is a summary measure of income inequality.
-
-```{r, echo = TRUE}
-gini_uf <- survey::svyby(~VD5008,
-                         by = ~UF,
-                         design = pnadc,
-                         FUN = svygini,
-                         na.rm = TRUE)
-
-gini_uf  <- gini_uf %>% mutate(
-    regiao = factor(case_when(UF %in% Norte ~ "Norte",
-                              UF %in% Nordeste ~ "Nordeste",
-                              UF %in% COeste ~ "Centro-Oeste",
-                              UF %in% Sudeste ~ "Sudeste",
-                              UF %in% Sul ~ "Sul")))
-```
-
-
-```{r, echo = TRUE}
-gini_uf %>% 
-    dplyr::as_tibble() %>%
-    dplyr::mutate(UF = forcats::fct_reorder(UF, VD5008)) %>%
-    ggplot2::ggplot(ggplot2::aes(x = VD5008, y = UF)) +
-    ggplot2::geom_col(aes(fill = regiao)) +
-    ggplot2::labs(title = "Gini Index by UF (2019)",
-                  x = NULL,
-                  y = NULL,
-                  caption = "Source: IBGE/PNADC microdata.")+
-    ggplot2::geom_text(aes(label= round(VD5008,2)), vjust=0.5, hjust=-0.2, size=2.5)
-```
 
